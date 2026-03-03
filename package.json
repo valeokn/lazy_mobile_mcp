@@ -4,6 +4,25 @@
   "description": "Local MCP server for mobile control and performance telemetry",
   "type": "module",
   "main": "dist/index.js",
+  "bin": {
+    "lazy-mobile-mcp": "bin/lazy-mobile-mcp.js"
+  },
+  "files": [
+    "bin/",
+    "dist/",
+    "python/adapters/__init__.py",
+    "python/adapters/android_adapter.py",
+    "python/adapters/ios_adapter.py",
+    "python/errors.py",
+    "python/perf_collector.py",
+    "python/policy_guard.py",
+    "python/requirements.txt",
+    "python/storage.py",
+    "python/worker.py"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "tsx src/index.ts",
@@ -11,7 +30,8 @@
     "test:watch": "vitest",
     "test:py": "python3 -m pytest python/tests",
     "lint": "tsc --noEmit",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "prepublishOnly": "npm run build && npm test && npm run test:py"
   },
   "keywords": [
     "mcp",

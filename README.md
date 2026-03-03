@@ -40,6 +40,29 @@ npm install
 python3 -m pip install -r python/requirements.txt
 ```
 
+### Install From npm
+
+Install locally in another project:
+
+```bash
+npm install lazy_mobile_mcp
+python3 -m pip install -r node_modules/lazy_mobile_mcp/python/requirements.txt
+```
+
+Run via `npx`:
+
+```bash
+npx lazy-mobile-mcp
+```
+
+For global install:
+
+```bash
+npm install -g lazy_mobile_mcp
+python3 -m pip install -r "$(npm root -g)/lazy_mobile_mcp/python/requirements.txt"
+lazy-mobile-mcp
+```
+
 ## Run
 
 ```bash
