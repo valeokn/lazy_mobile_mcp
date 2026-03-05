@@ -175,7 +175,7 @@ export class IOSAdapter {
     });
   }
 
-  launchApp(input: { deviceId: string; appId: string }): { launch_ms: number } {
+  launchApp(input: { deviceId: string; appId: string; coldStart: boolean }): { launch_ms: number } {
     if (!this.isSupportedHost) {
       throw new DependencyError("iOS tools require macOS host");
     }
@@ -185,8 +185,21 @@ export class IOSAdapter {
 
     if (targetType === "simulator") {
       this.ensureSimulatorBooted(input.deviceId);
+      if (input.coldStart) {
+        try {
+          this.run(["xcrun", "simctl", "terminate", input.deviceId, input.appId]);
+        } catch (error: unknown) {
+          if (!(error instanceof DependencyError) || !IOSAdapter.isIgnorableSimulatorTerminateError(error.message)) {
+            throw error;
+          }
+        }
+      }
       this.run(["xcrun", "simctl", "launch", input.deviceId, input.appId]);
     } else {
+      if (input.coldStart) {
+        this.stopApp({ deviceId: input.deviceId, appId: input.appId });
+      }
+
       this.runDevicectlJson([
         "device",
         "process",
@@ -674,6 +687,11 @@ export class IOSAdapter {
       name,
       targetType
     };
+  }
+
+  private static isIgnorableSimulatorTerminateError(message: string): boolean {
+    const text = message.toLowerCase();
+    return text.includes("no such process") || text.includes("found nothing to terminate") || text.includes("not running");
   }
 
   static findPidFromProcessesPayload(payload: unknown, appId: string): number | null {

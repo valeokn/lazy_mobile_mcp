@@ -2,6 +2,17 @@ import { describe, expect, it } from "vitest";
 import { toolValidators } from "../src/toolSchemas.js";
 
 describe("toolSchemas", () => {
+  it("defaults screenshot save to true", () => {
+    const parsed = toolValidators["mobile.screenshot"].parse({});
+    expect(parsed.format).toBe("png");
+    expect(parsed.save).toBe(true);
+  });
+
+  it("defaults launch cold_start to false", () => {
+    const parsed = toolValidators["mobile.launch_app"].parse({ app_id: "com.example.app" });
+    expect(parsed.cold_start).toBe(false);
+  });
+
   it("validates tap args", () => {
     const parsed = toolValidators["mobile.tap"].parse({ x: 10, y: 20 });
     expect(parsed.x).toBe(10);

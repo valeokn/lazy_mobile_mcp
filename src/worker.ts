@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { AndroidAdapter } from "./adapters/androidAdapter.js";
@@ -36,6 +36,15 @@ function asInteger(value: unknown, fallback: number): number {
   }
   return fallback;
 }
+
+function asBoolean(value: unknown, fallback: boolean): boolean {
+  if (typeof value === "boolean") {
+    return value;
+  }
+  return fallback;
+}
+
+const INLINE_SCREENSHOT_MAX_BYTES = 8 * 1024 * 1024;
 
 export class Worker {
   private readonly storage: Storage;
@@ -223,14 +232,43 @@ export class Worker {
 
   private screenshot(params: Record<string, unknown>, traceId: string): Record<string, unknown> {
     const selected = this.resolveDevice(params, traceId);
+    const save = asBoolean(params.save, true);
+
+    if (!save) {
+      const tempDir = mkdtempSync(path.join(os.tmpdir(), "lazy-mobile-inline-screenshot-"));
+      const tempPath = path.join(tempDir, `${randomUUID()}.png`);
+
+      try {
+        const result = this.captureScreenshot(selected, tempPath, traceId);
+        const payload = readFileSync(tempPath);
+
+        if (payload.byteLength > INLINE_SCREENSHOT_MAX_BYTES) {
+          throw new AppError({
+            message: "Inline screenshot payload exceeds 8MB limit",
+            code: "ERR_PAYLOAD_TOO_LARGE",
+            category: "validation",
+            traceId
+          });
+        }
+
+        return {
+          artifact_id: null,
+          path: null,
+          width: result.width,
+          height: result.height,
+          saved: false,
+          mime_type: "image/png",
+          image_base64: payload.toString("base64")
+        };
+      } finally {
+        rmSync(tempDir, { recursive: true, force: true });
+      }
+    }
+
     const artifactId = randomUUID();
     const outputPath = path.join("artifacts", "screenshots", `${artifactId}.png`);
     mkdirSync(path.dirname(outputPath), { recursive: true });
-
-    const result =
-      selected.platform === "android"
-        ? this.android.screenshot({ deviceId: selected.deviceId, outputPath })
-        : this.iosScreenshot(selected, outputPath, traceId);
+    const result = this.captureScreenshot(selected, outputPath, traceId);
 
     this.storage.insertArtifact({
       artifactId,
@@ -250,7 +288,8 @@ export class Worker {
       artifact_id: artifactId,
       path: result.path,
       width: result.width,
-      height: result.height
+      height: result.height,
+      saved: true
     };
   }
 
@@ -311,6 +350,7 @@ export class Worker {
   private launchApp(params: Record<string, unknown>, traceId: string): Record<string, unknown> {
     const selected = this.resolveDevice(params, traceId);
     const appId = asString(params.app_id).trim();
+    const coldStart = asBoolean(params.cold_start, false);
     if (appId.length === 0) {
       throw new AppError({
         message: "app_id is required",
@@ -322,12 +362,14 @@ export class Worker {
 
     const result =
       selected.platform === "android"
-        ? this.android.launchApp({ deviceId: selected.deviceId, appId })
-        : this.iosLaunchApp(selected, appId, traceId);
+        ? this.android.launchApp({ deviceId: selected.deviceId, appId, coldStart })
+        : this.iosLaunchApp(selected, appId, coldStart, traceId);
 
     return {
       ok: true,
-      launch_ms: result.launch_ms
+      launch_ms: result.launch_ms,
+      cold_start_requested: coldStart,
+      cold_start_applied: coldStart
     };
   }
 
@@ -512,8 +554,14 @@ export class Worker {
     return this.ios.screenshot({ deviceId: selected.deviceId, outputPath });
   }
 
-  private iosLaunchApp(selected: SelectedDevice, appId: string, traceId: string): { launch_ms: number } {
+  private iosLaunchApp(selected: SelectedDevice, appId: string, coldStart: boolean, traceId: string): { launch_ms: number } {
     this.assertIosHost(traceId);
-    return this.ios.launchApp({ deviceId: selected.deviceId, appId });
+    return this.ios.launchApp({ deviceId: selected.deviceId, appId, coldStart });
+  }
+
+  private captureScreenshot(selected: SelectedDevice, outputPath: string, traceId: string): { path: string; width: number; height: number } {
+    return selected.platform === "android"
+      ? this.android.screenshot({ deviceId: selected.deviceId, outputPath })
+      : this.iosScreenshot(selected, outputPath, traceId);
   }
 }

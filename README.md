@@ -67,8 +67,10 @@ npm install lazy_mobile_mcp
 
 Requires `codex` CLI in `PATH`.
 
+Published package:
+
 ```bash
-npx -y lazy_mobile_mcp setup-codex
+npx -y lazy_mobile_mcp@latest setup-codex
 ```
 
 Verify registration:
@@ -79,22 +81,38 @@ codex mcp get lazy-mobile-mcp
 
 Then open a new Codex session and call `mobile.list_devices`.
 
+Current local checkout:
+
+```bash
+node bin/lazy-mobile-mcp.js setup-codex --local --name lazy-mobile-mcp-local
+```
+
 ## Codex One-Command Setup (Advanced)
 
 Optional overrides:
 
 ```bash
-npx -y lazy_mobile_mcp setup-codex \
+npx -y lazy_mobile_mcp@latest setup-codex \
   --name lazy-mobile-mcp \
   --sqlite-path "$HOME/.codex/mcp-data/lazy-mobile/mobile.db" \
   --adb-bin adb \
   --wda-base-url http://127.0.0.1:8100
 ```
 
+Local checkout with the same overrides:
+
+```bash
+node bin/lazy-mobile-mcp.js setup-codex \
+  --local \
+  --name lazy-mobile-mcp-local \
+  --sqlite-path "$HOME/.codex/mcp-data/lazy-mobile/mobile.db" \
+  --adb-bin adb
+```
+
 Run with `npx`:
 
 ```bash
-npx lazy-mobile-mcp
+npx -y lazy_mobile_mcp@latest
 ```
 
 Global install:
@@ -139,4 +157,11 @@ If `WDA_BASE_URL` is not set, the adapter probes common local endpoints (`127.0.
 
 ```bash
 npm test
+```
+
+Recommended local MCP smoke:
+
+```bash
+node dist/cli.js --help
+node dist/cli.js setup-codex --help
 ```

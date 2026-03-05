@@ -3,12 +3,14 @@ import os from "node:os";
 import { mkdtempSync, rmSync, readFileSync } from "node:fs";
 import { afterEach, describe, expect, it } from "vitest";
 import { IOSAdapter } from "../src/adapters/iosAdapter.js";
+import { DependencyError } from "../src/errors.js";
 
 class FakeIOSAdapter extends IOSAdapter {
   public commands: string[][] = [];
   public devicectlCalls: string[][] = [];
   public devicectlResults: Record<string, unknown>[] = [];
   public simulatorBootState = new Map<string, string>([["SIM-1234-AAAA", "Shutdown"]]);
+  public simulatorTerminateErrorMessage: string | null = null;
 
   override get isSupportedHost(): boolean {
     return true;
@@ -36,6 +38,13 @@ class FakeIOSAdapter extends IOSAdapter {
     if (command.slice(0, 3).join(" ") === "xcrun simctl boot") {
       const deviceId = command[3] ?? "";
       this.simulatorBootState.set(deviceId, "Booted");
+      return { stdout: "", stderr: "" };
+    }
+
+    if (command.slice(0, 3).join(" ") === "xcrun simctl terminate") {
+      if (this.simulatorTerminateErrorMessage) {
+        throw new DependencyError(this.simulatorTerminateErrorMessage);
+      }
       return { stdout: "", stderr: "" };
     }
 
@@ -145,7 +154,7 @@ describe("IOSAdapter", () => {
     const adapter = new FakeIOSAdapter();
     adapter.listDevices();
 
-    adapter.launchApp({ deviceId: "SIM-1234-AAAA", appId: "com.example.app" });
+    adapter.launchApp({ deviceId: "SIM-1234-AAAA", appId: "com.example.app", coldStart: false });
 
     expect(adapter.commands).toContainEqual(["xcrun", "simctl", "launch", "SIM-1234-AAAA", "com.example.app"]);
   });
@@ -154,7 +163,7 @@ describe("IOSAdapter", () => {
     const adapter = new FakeIOSAdapter();
     adapter.listDevices();
 
-    adapter.launchApp({ deviceId: "PHY-7777-BBBB", appId: "com.example.app" });
+    adapter.launchApp({ deviceId: "PHY-7777-BBBB", appId: "com.example.app", coldStart: false });
 
     expect(adapter.devicectlCalls.some((call) => call.slice(0, 3).join(" ") === "device process launch")).toBe(true);
   });
@@ -181,6 +190,32 @@ describe("IOSAdapter", () => {
     expect(adapter.devicectlCalls[0]?.slice(0, 3)).toEqual(["device", "info", "processes"]);
     expect(adapter.devicectlCalls[1]?.slice(0, 3)).toEqual(["device", "process", "terminate"]);
     expect(adapter.devicectlCalls[1]).toContain("1234");
+  });
+
+  it("continues simulator cold launch when app is not running", () => {
+    const adapter = new FakeIOSAdapter();
+    adapter.listDevices();
+    adapter.simulatorTerminateErrorMessage = JSON.stringify({
+      command: ["xcrun", "simctl", "terminate", "SIM-1234-AAAA", "com.example.app"],
+      code: 3,
+      stderr: "No such process"
+    });
+
+    adapter.launchApp({ deviceId: "SIM-1234-AAAA", appId: "com.example.app", coldStart: true });
+
+    expect(adapter.commands).toContainEqual(["xcrun", "simctl", "terminate", "SIM-1234-AAAA", "com.example.app"]);
+    expect(adapter.commands).toContainEqual(["xcrun", "simctl", "launch", "SIM-1234-AAAA", "com.example.app"]);
+  });
+
+  it("cold launch on physical device attempts stop before launch", () => {
+    const adapter = new FakeIOSAdapter();
+    adapter.listDevices();
+    adapter.devicectlResults = [{ result: { processes: [] } }, {}];
+
+    adapter.launchApp({ deviceId: "PHY-7777-BBBB", appId: "com.example.app", coldStart: true });
+
+    expect(adapter.devicectlCalls[0]?.slice(0, 3)).toEqual(["device", "info", "processes"]);
+    expect(adapter.devicectlCalls[1]?.slice(0, 3)).toEqual(["device", "process", "launch"]);
   });
 
   it("parses xctrace line variants", () => {

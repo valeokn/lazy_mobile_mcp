@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 export interface SetupCodexOptions {
   name: string;
@@ -9,6 +10,7 @@ export interface SetupCodexOptions {
   adbBin: string;
   wdaBaseUrl?: string;
   packageName: string;
+  local: boolean;
 }
 
 export interface CommandResult {
@@ -24,6 +26,10 @@ export interface SetupCodexDependencies {
   runCommand?: CommandRunner;
   stdout?: Pick<NodeJS.WriteStream, "write">;
   stderr?: Pick<NodeJS.WriteStream, "write">;
+}
+
+function resolveLocalEntrypoint(): string {
+  return fileURLToPath(new URL("../bin/lazy-mobile-mcp.js", import.meta.url));
 }
 
 function defaultRunner(command: string, args: string[]): CommandResult {
@@ -75,7 +81,8 @@ export function createDefaultSetupCodexOptions(homeDir = os.homedir()): SetupCod
     name: "lazy-mobile-mcp",
     sqlitePath: path.join(homeDir, ".codex", "mcp-data", "lazy-mobile", "mobile.db"),
     adbBin: "adb",
-    packageName: "lazy_mobile_mcp"
+    packageName: "lazy_mobile_mcp@latest",
+    local: false
   };
 }
 
@@ -83,6 +90,7 @@ export function parseSetupCodexArgs(args: string[], defaults = createDefaultSetu
   const options: SetupCodexOptions = {
     ...defaults
   };
+  let packageNameExplicit = false;
 
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
@@ -120,11 +128,21 @@ export function parseSetupCodexArgs(args: string[], defaults = createDefaultSetu
 
     if (arg === "--package-name") {
       options.packageName = takeOptionValue(args, index);
+      packageNameExplicit = true;
       index += 1;
       continue;
     }
 
+    if (arg === "--local") {
+      options.local = true;
+      continue;
+    }
+
     throw new Error(`Unknown option: ${arg}`);
+  }
+
+  if (options.local && packageNameExplicit) {
+    throw new Error("--local cannot be combined with --package-name");
   }
 
   return options;
@@ -139,7 +157,8 @@ export function setupCodexUsage(): string {
     "  --sqlite-path <path>        SQLite path (default: ~/.codex/mcp-data/lazy-mobile/mobile.db)",
     "  --adb-bin <path>            adb binary (default: adb)",
     "  --wda-base-url <url>        Optional WDA base URL",
-    "  --package-name <name>       npm package for npx (default: lazy_mobile_mcp)",
+    "  --package-name <name>       npm package for npx (default: lazy_mobile_mcp@latest)",
+    "  --local                     Register the current package's local bin instead of npx",
     "  -h, --help                  Show help"
   ].join("\n");
 }
@@ -181,7 +200,11 @@ export function runSetupCodex(options: SetupCodexOptions, dependencies: SetupCod
     addArgs.push("--env", `WDA_BASE_URL=${options.wdaBaseUrl}`);
   }
 
-  addArgs.push("--", "npx", "-y", options.packageName);
+  if (options.local) {
+    addArgs.push("--", "node", resolveLocalEntrypoint());
+  } else {
+    addArgs.push("--", "npx", "-y", options.packageName);
+  }
 
   const addResult = runCommand("codex", addArgs);
   assertCommandOk("codex", addArgs, addResult, `Failed to add MCP server '${options.name}'`);

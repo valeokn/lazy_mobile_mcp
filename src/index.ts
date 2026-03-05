@@ -50,7 +50,7 @@ async function main(): Promise<void> {
 
   const server = new McpServer({
     name: "lazy-mobile-mcp",
-    version: "1.0.0"
+    version: "1.0.3"
   });
 
   const registerTool = (toolName: ToolName): void => {

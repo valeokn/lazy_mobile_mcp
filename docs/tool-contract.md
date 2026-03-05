@@ -12,6 +12,9 @@ All tool responses include `trace_id` in successful structured content and in ev
 }
 ```
 
+Additional validation error:
+- `ERR_PAYLOAD_TOO_LARGE`: returned by `mobile.screenshot` when `save=false` and PNG payload is larger than 8MB.
+
 ## Tools
 
 ### `mobile.list_devices`
@@ -49,11 +52,18 @@ All tool responses include `trace_id` in successful structured content and in ev
 ```json
 { "device_id": "string?", "format": "png", "save": true }
 ```
-- Output:
+- Output when `save=true`:
 ```json
-{ "artifact_id": "uuid", "path": "artifacts/screenshots/<uuid>.png", "width": 0, "height": 0 }
+{ "artifact_id": "uuid", "path": "artifacts/screenshots/<uuid>.png", "width": 0, "height": 0, "saved": true }
+```
+- Output when `save=false`:
+```json
+{ "artifact_id": null, "path": null, "width": 0, "height": 0, "saved": false, "mime_type": "image/png", "image_base64": "..." }
 ```
 Notes:
+- `save=true` persists screenshot metadata into `artifacts`.
+- `save=false` does not persist files/rows and returns inline base64 payload.
+- `save=false` enforces an 8MB payload limit (`ERR_PAYLOAD_TOO_LARGE` on overflow).
 - iOS simulator path auto-boots simulator if needed.
 - iOS physical screenshot uses WDA `/screenshot`; if `WDA_BASE_URL` is not set, server attempts local WDA auto-discovery.
 
@@ -103,8 +113,10 @@ Notes:
 ```
 - Output:
 ```json
-{ "ok": true, "launch_ms": 321.4 }
+{ "ok": true, "launch_ms": 321.4, "cold_start_requested": false, "cold_start_applied": false }
 ```
+Notes:
+- `cold_start=true` attempts app stop before launch on both Android and iOS.
 
 ### `mobile.stop_app`
 - Input:

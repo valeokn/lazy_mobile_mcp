@@ -124,7 +124,11 @@ export class AndroidAdapter {
     this.run([this.adbBin, "-s", input.deviceId, "shell", "input", "text", escaped]);
   }
 
-  launchApp(input: { deviceId: string; appId: string }): { launch_ms: number } {
+  launchApp(input: { deviceId: string; appId: string; coldStart: boolean }): { launch_ms: number } {
+    if (input.coldStart) {
+      this.stopApp({ deviceId: input.deviceId, appId: input.appId });
+    }
+
     const start = process.hrtime.bigint();
     this.run([
       this.adbBin,
